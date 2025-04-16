@@ -1,0 +1,22 @@
+# AWS Configuration
+
+# AWS Credentials
+aws:
+  region: "us-east-1"  # Change this to your AWS region
+  access_key_id: ""    # Add your AWS Access Key ID
+  secret_access_key: "" # Add your AWS Secret Access Key
+  # Optional: Use profile instead of access keys
+  # profile: "default"  # Uncomment and set your AWS profile name if using profiles
+
+# Analysis Settings
+analysis:
+  max_workers: 4
+  retry_attempts: 3
+  retry_delay: 1
+
+# Bucket Configuration
+buckets:
+  blade:
+    AWS:
+      - prefix: ""
+        compression_ratio: 12.67
