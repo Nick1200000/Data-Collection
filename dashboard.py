@@ -42,144 +42,129 @@ with st.sidebar:
     st.title("S3 Analytics Dashboard")
     st.markdown("---")
     
-    # Get available buckets from config
-    available_buckets = list(st.session_state.analyzer.config['buckets'].keys())
-    
     # Bucket selection
-    bucket_name = st.selectbox(
-        "Select Bucket",
-        options=available_buckets,
-        index=0 if available_buckets else None
-    )
-    
-    # Get available prefixes for selected bucket
-    if bucket_name:
-        available_sources = st.session_state.analyzer.config['buckets'][bucket_name]
-        source_options = list(available_sources.keys())
-        selected_source = st.selectbox(
-            "Select Data Source",
-            options=source_options,
-            index=0 if source_options else None
-        )
-        
-        if selected_source:
-            prefix_options = [item['prefix'] for item in available_sources[selected_source]]
-            prefix = st.selectbox(
-                "Select Prefix",
-                options=prefix_options,
-                index=0 if prefix_options else None
-            )
+    bucket_name = st.text_input("Bucket Name", value="bladerunner-network-aws")
+    prefix = st.text_input("Prefix", value="bladerunner-network-aws/2025/02")
     
     # Analysis controls
     if st.button("Run Analysis", type="primary"):
         with st.spinner('Analyzing bucket...'):
             start_time = time.time()
             results = st.session_state.analyzer.analyze_bucket(bucket_name, prefix)
-            st.session_state.last_analysis = {
-                'results': results,
-                'timestamp': datetime.now(),
-                'duration': time.time() - start_time
-            }
+            if results:
+                st.session_state.last_analysis = {
+                    'results': results,
+                    'timestamp': datetime.now(),
+                    'duration': time.time() - start_time
+                }
+            else:
+                st.error("Failed to analyze bucket. Please check your configuration and try again.")
 
 # Main content
 st.title("S3 Bucket Analysis Dashboard")
 
-if st.session_state.last_analysis:
+if st.session_state.last_analysis and st.session_state.last_analysis['results']:
     results = st.session_state.last_analysis['results']
     
-    # Metrics cards
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Size", f"{results['total_size_mb']} MB")
-    with col2:
-        st.metric("Total Objects", results['total_objects'])
-    with col3:
-        st.metric("Average Size", f"{results['average_size_mb']} MB")
-    with col4:
-        st.metric("Analysis Time", f"{st.session_state.last_analysis['duration']:.2f}s")
-    
-    # Charts
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Size distribution pie chart
-        st.subheader("Size Distribution")
-        size_df = pd.DataFrame({
-            'Category': list(results['size_distribution'].keys()),
-            'Count': list(results['size_distribution'].values())
-        })
-        fig = px.pie(size_df, values='Count', names='Category', 
-                    title='Object Size Distribution')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Storage class distribution
-        st.subheader("Storage Class Distribution")
-        storage_df = pd.DataFrame({
-            'Class': list(results['storage_class_distribution'].keys()),
-            'Count': list(results['storage_class_distribution'].values())
-        })
-        fig = px.bar(storage_df, x='Class', y='Count',
-                    title='Storage Class Distribution')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Objects table with filters
-    st.subheader("Objects")
-    
-    # Filters
-    col1, col2 = st.columns(2)
-    with col1:
-        min_size = st.number_input("Minimum Size (MB)", min_value=0.0, 
-                                 value=0.0, step=0.1)
-    with col2:
-        date_range = st.date_input("Date Range", 
-                                 value=(datetime.now() - timedelta(days=30), 
-                                       datetime.now()))
-    
-    # Filter objects
-    df = pd.DataFrame(results['objects'])
-    df['Last Modified'] = pd.to_datetime(df['Last Modified'])
-    filtered_df = df[
-        (df['Size (MB)'] >= min_size) &
-        (df['Last Modified'].dt.date >= date_range[0]) &
-        (df['Last Modified'].dt.date <= date_range[1])
-    ]
-    
-    # Display filtered table
-    st.dataframe(
-        filtered_df,
-        column_config={
-            "Size (MB)": st.column_config.NumberColumn(
-                format="%.2f MB"
-            ),
-            "Last Modified": st.column_config.DatetimeColumn(
-                format="YYYY-MM-DD HH:mm:ss"
+    try:
+        # Metrics cards
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Size", f"{results.get('total_size_mb', 0)} MB")
+        with col2:
+            st.metric("Total Objects", results.get('total_objects', 0))
+        with col3:
+            st.metric("Average Size", f"{results.get('average_size_mb', 0)} MB")
+        with col4:
+            st.metric("Analysis Time", f"{st.session_state.last_analysis['duration']:.2f}s")
+        
+        # Charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Size distribution pie chart
+            st.subheader("Size Distribution")
+            if results.get('size_distribution'):
+                size_df = pd.DataFrame({
+                    'Category': list(results['size_distribution'].keys()),
+                    'Count': list(results['size_distribution'].values())
+                })
+                fig = px.pie(size_df, values='Count', names='Category', 
+                            title='Object Size Distribution')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Storage class distribution
+            st.subheader("Storage Class Distribution")
+            if results.get('storage_class_distribution'):
+                storage_df = pd.DataFrame({
+                    'Class': list(results['storage_class_distribution'].keys()),
+                    'Count': list(results['storage_class_distribution'].values())
+                })
+                fig = px.bar(storage_df, x='Class', y='Count',
+                            title='Storage Class Distribution')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        # Objects table with filters
+        st.subheader("Objects")
+        
+        # Filters
+        col1, col2 = st.columns(2)
+        with col1:
+            min_size = st.number_input("Minimum Size (MB)", min_value=0.0, 
+                                     value=0.0, step=0.1)
+        with col2:
+            date_range = st.date_input("Date Range", 
+                                     value=(datetime.now() - timedelta(days=30), 
+                                           datetime.now()))
+        
+        # Filter objects
+        if results.get('objects'):
+            df = pd.DataFrame(results['objects'])
+            df['Last Modified'] = pd.to_datetime(df['Last Modified'])
+            filtered_df = df[
+                (df['Size (MB)'] >= min_size) &
+                (df['Last Modified'].dt.date >= date_range[0]) &
+                (df['Last Modified'].dt.date <= date_range[1])
+            ]
+            
+            # Display filtered table
+            st.dataframe(
+                filtered_df,
+                column_config={
+                    "Size (MB)": st.column_config.NumberColumn(
+                        format="%.2f MB"
+                    ),
+                    "Last Modified": st.column_config.DatetimeColumn(
+                        format="YYYY-MM-DD HH:mm:ss"
+                    )
+                },
+                use_container_width=True
             )
-        },
-        use_container_width=True
-    )
-    
-    # Export options
-    st.subheader("Export Data")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Export to CSV"):
-            csv = filtered_df.to_csv(index=False)
-            st.download_button(
-                label="Download CSV",
-                data=csv,
-                file_name="s3_analysis.csv",
-                mime="text/csv"
-            )
-    with col2:
-        if st.button("Export to JSON"):
-            json_data = filtered_df.to_json(orient='records')
-            st.download_button(
-                label="Download JSON",
-                data=json_data,
-                file_name="s3_analysis.json",
-                mime="application/json"
-            )
+            
+            # Export options
+            st.subheader("Export Data")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Export to CSV"):
+                    csv = filtered_df.to_csv(index=False)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv,
+                        file_name="s3_analysis.csv",
+                        mime="text/csv"
+                    )
+            with col2:
+                if st.button("Export to JSON"):
+                    json_data = filtered_df.to_json(orient='records')
+                    st.download_button(
+                        label="Download JSON",
+                        data=json_data,
+                        file_name="s3_analysis.json",
+                        mime="application/json"
+                    )
+    except Exception as e:
+        st.error(f"Error displaying results: {str(e)}")
 
 else:
-    st.info("Select a bucket and click 'Run Analysis' to start analyzing your S3 data.")
+    st.info("Click 'Run Analysis' in the sidebar to start analyzing your S3 bucket.")
