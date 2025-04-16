@@ -3,8 +3,8 @@
 # AWS Credentials
 aws:
   region: "ap-south-1"  # Change this to your AWS region
-  access_key_id: "AKIAVWABJZFQOCOKUT5O"    # Add your AWS Access Key ID
-  secret_access_key: "2g57aNMr2ftIfUjkGKq012ka2LV7q5GvPgmTF19L" # Add your AWS Secret Access Key
+  access_key_id: "AKIAVWABJZFQINXAOZNA"    # Add your AWS Access Key ID
+  secret_access_key: "+6l6SIhS2vDD0CkI8b6cmwxIK5uKoN+627OeABKq" # Add your AWS Secret Access Key
   # Optional: Use profile instead of access keys
   # profile: "default"  # Uncomment and set your AWS profile name if using profiles
 
