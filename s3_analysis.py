@@ -77,9 +77,9 @@ class S3Analyzer:
                 aws_secret_access_key=str(secret_key),
                 region_name=str(region)
             )
-            # Test credentials with a simple call (optional but recommended)
-            client.list_buckets() # This will raise an error if creds are invalid
-            logging.info("Boto3 S3 client initialized and credentials validated successfully.")
+            # Test credentials line removed:
+            # client.list_buckets() # <-- THIS LINE IS REMOVED
+            logging.info("Boto3 S3 client initialized successfully.")
             return client
         except (NoCredentialsError, PartialCredentialsError):
             logging.error("AWS credentials not found or incomplete.")
@@ -95,6 +95,9 @@ class S3Analyzer:
             if error_code == 'InvalidClientTokenId' or error_code == 'SignatureDoesNotMatch':
                  logging.error(f"Invalid AWS credentials provided: {error_code}")
                  st.error("Invalid AWS credentials provided. Please check config.yaml.")
+            elif error_code == 'AccessDenied':
+                 logging.error(f"Initial Access Denied checking S3 client: {e}")
+                 st.error(f"Access Denied during S3 client initialization. Check basic S3 permissions for the user.")
             else:
                  logging.error(f"Failed to initialize S3 client due to ClientError: {e}")
                  st.error(f"Failed to initialize S3 client: {e}")
@@ -143,8 +146,6 @@ class S3Analyzer:
 
         try:
             paginator = self.s3_client.get_paginator('list_objects_v2')
-            # Add Delimiter='/' if you only want top-level items in the prefix
-            # pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix, Delimiter='/')
             pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
 
             processed_pages = 0
@@ -152,45 +153,44 @@ class S3Analyzer:
                 processed_pages += 1
                 if 'Contents' in page:
                     for obj in page['Contents']:
-                        # Skip zero-byte objects often representing folders if prefix ends with /
                         if obj['Size'] == 0 and obj['Key'].endswith('/'):
-                            continue
+                            continue # Skip potential folder placeholders
 
                         size_bytes = obj['Size']
                         size_mb = size_bytes / (1024 * 1024)
                         total_size_bytes += size_bytes
                         total_objects += 1
-                        storage_class = obj.get('StorageClass', 'STANDARD') # S3 Standard is default
+                        storage_class = obj.get('StorageClass', 'STANDARD')
 
-                        # Update storage class distribution
                         storage_class_distribution[storage_class] = storage_class_distribution.get(storage_class, 0) + 1
-
-                        # Categorize by size
                         size_category = self._get_size_category(size_mb)
                         size_distribution[size_category] = size_distribution.get(size_category, 0) + 1
 
-                        # Format LastModified safely
                         last_modified_str = "N/A"
                         if 'LastModified' in obj:
                             try:
-                                last_modified_str = obj['LastModified'].strftime('%Y-%m-%d %H:%M:%S')
+                                # Ensure LastModified is a datetime object before formatting
+                                if isinstance(obj['LastModified'], datetime):
+                                     last_modified_str = obj['LastModified'].strftime('%Y-%m-%d %H:%M:%S')
+                                else:
+                                     logging.warning(f"LastModified for key {obj['Key']} is not a datetime object: {type(obj['LastModified'])}")
                             except AttributeError:
                                 logging.warning(f"Could not format LastModified for key: {obj['Key']}")
+                            except Exception as dt_err:
+                                logging.warning(f"Unexpected error formatting LastModified for key {obj['Key']}: {dt_err}")
 
 
                         objects_list.append({
                             'Key': obj['Key'],
-                            'Size (MB)': round(size_mb, 2), # Store MB for consistency
+                            'Size (MB)': round(size_mb, 2),
                             'Last Modified': last_modified_str,
                             'Storage Class': storage_class
                         })
-                # Log progress periodically for very large buckets
                 if processed_pages % 50 == 0:
                      logging.info(f"Processed {processed_pages} pages for {bucket_name}/{prefix}...")
 
             total_size_mb = total_size_bytes / (1024 * 1024)
             average_size_mb = (total_size_mb / total_objects) if total_objects > 0 else 0
-
             analysis_duration = time.time() - start_time
             logging.info(f"Analysis complete for {bucket_name}/{prefix}. "
                          f"Objects: {total_objects}, Total Size: {total_size_mb:.2f} MB. "
@@ -203,7 +203,6 @@ class S3Analyzer:
                 'size_distribution': size_distribution,
                 'storage_class_distribution': storage_class_distribution,
                 'objects': objects_list,
-                # 'last_modified_dates' can be derived from 'objects' if needed later
             }
 
         except ClientError as e:
@@ -213,7 +212,7 @@ class S3Analyzer:
             if error_code == 'NoSuchBucket':
                  st.error(f"Error: Bucket '{bucket_name}' not found or you don't have permission to access it.")
             elif error_code == 'AccessDenied':
-                 st.error(f"Error: Access Denied. Check IAM permissions for s3:ListBucket on '{bucket_name}' and s3:GetObject if needed for specific object actions.")
+                 st.error(f"Error: Access Denied. Check IAM permissions for s3:ListBucket on '{bucket_name}'.")
             elif error_code == 'InvalidBucketName':
                  st.error(f"Error: Invalid bucket name '{bucket_name}'. Please check the name format.")
             else:
@@ -223,7 +222,6 @@ class S3Analyzer:
             logging.error(f"An unexpected error occurred during bucket analysis for '{bucket_name}/{prefix}': {e}", exc_info=True)
             st.error(f"An unexpected error occurred during analysis: {e}")
             return None
-
 
     def analyze_bucket(self, bucket_name, prefix, use_cache=True):
         """
@@ -240,12 +238,11 @@ class S3Analyzer:
         if not isinstance(bucket_name, str) or not bucket_name:
              st.error("Invalid bucket name provided.")
              return None
-        if not isinstance(prefix, str): # Prefix can be empty string
+        if not isinstance(prefix, str):
              st.warning("Prefix is not a string, using empty prefix.")
              prefix = ""
 
-
-        cache_key = f"{bucket_name}::{prefix}" # Use a clearer separator
+        cache_key = f"{bucket_name}::{prefix}"
 
         if use_cache and cache_key in self.cache:
             logging.info(f"Returning cached results for {cache_key}")
@@ -259,12 +256,12 @@ class S3Analyzer:
 
         return results
 
-# Example usage (optional, for testing directly)
+# --- Example usage section remains the same ---
 # if __name__ == "__main__":
+#     # Ensure config.yaml is present for direct testing
 #     try:
 #         analyzer = S3Analyzer('config.yaml')
-#         if analyzer and analyzer.s3_client: # Check if initialization was successful
-#             # Load bucket/prefix from config for testing if needed
+#         if analyzer and analyzer.s3_client:
 #             test_bucket = analyzer.config.get('bucket', 'YOUR_TEST_BUCKET')
 #             test_prefix = analyzer.config.get('prefix', 'YOUR_TEST_PREFIX/')
 #             print(f"--- Running Test Analysis ---")
@@ -272,20 +269,22 @@ class S3Analyzer:
 #             test_results = analyzer.analyze_bucket(test_bucket, test_prefix, use_cache=False)
 #             if test_results:
 #                 print("--- Analysis Results ---")
-#                 print(f"Total Size (MB): {test_results['total_size_mb']}")
-#                 print(f"Total Objects: {test_results['total_objects']}")
-#                 print(f"Average Size (MB): {test_results['average_size_mb']}")
+#                 print(f"Total Size (MB): {test_results['total_size_mb']:.2f}")
+#                 print(f"Total Objects: {test_results['total_objects']:,}")
+#                 print(f"Average Size (MB): {test_results['average_size_mb']:.2f}")
 #                 print("\nSize Distribution:")
 #                 for category, count in test_results['size_distribution'].items():
-#                     print(f"  {category}: {count}")
+#                     print(f"  {category}: {count:,}")
 #                 print("\nStorage Class Distribution:")
 #                 for storage_class, count in test_results['storage_class_distribution'].items():
-#                     print(f"  {storage_class}: {count}")
+#                     print(f"  {storage_class}: {count:,}")
 #                 print(f"\nFirst 5 Objects:")
 #                 for obj in test_results['objects'][:5]:
-#                     print(f"  - {obj['Key']} ({obj['Size (MB)']:.2f} MB)")
+#                     print(f"  - {obj['Key']} ({obj['Size (MB)']:.2f} MB, {obj['Storage Class']}, {obj['Last Modified']})")
 #             else:
 #                 print("--- Analysis Failed ---")
+#         else:
+#              print("Analyzer could not be initialized.")
 #     except ValueError as e:
 #          print(f"Initialization Error: {e}")
 #     except Exception as e:
