@@ -1,4 +1,4 @@
- 
+#!/usr/bin/env python3
 
 import boto3
 import yaml
@@ -38,6 +38,7 @@ class S3Analyzer:
             objects = []
             size_distribution = {}
             last_modified_dates = []
+            storage_classes = {}
             
             for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
                 if 'Contents' in page:
@@ -47,6 +48,10 @@ class S3Analyzer:
                         total_objects += 1
                         last_modified = obj['LastModified']
                         last_modified_dates.append(last_modified)
+                        storage_class = obj.get('StorageClass', 'STANDARD')
+                        
+                        # Update storage class distribution
+                        storage_classes[storage_class] = storage_classes.get(storage_class, 0) + 1
                         
                         # Categorize by size
                         size_category = self._get_size_category(size_mb)
@@ -56,7 +61,7 @@ class S3Analyzer:
                             'Key': obj['Key'],
                             'Size (MB)': round(size_mb, 2),
                             'Last Modified': last_modified.strftime('%Y-%m-%d %H:%M:%S'),
-                            'Storage Class': obj.get('StorageClass', 'STANDARD')
+                            'Storage Class': storage_class
                         })
 
             return {
@@ -64,6 +69,7 @@ class S3Analyzer:
                 'total_objects': total_objects,
                 'objects': objects,
                 'size_distribution': size_distribution,
+                'storage_class_distribution': storage_classes,
                 'last_modified_dates': last_modified_dates,
                 'average_size_mb': round(total_size / total_objects, 2) if total_objects > 0 else 0
             }
@@ -81,14 +87,6 @@ class S3Analyzer:
             return "Large (10-100MB)"
         else:
             return "Very Large (>100MB)"
-
-    def get_storage_class_distribution(self, objects):
-        """Get distribution of storage classes"""
-        storage_classes = {}
-        for obj in objects:
-            storage_class = obj['Storage Class']
-            storage_classes[storage_class] = storage_classes.get(storage_class, 0) + 1
-        return storage_classes
 
     def analyze_bucket(self, bucket_name, prefix):
         """Analyze bucket with caching"""
