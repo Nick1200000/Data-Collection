@@ -1,4 +1,4 @@
- 
+#!/usr/bin/env python3
 
 import streamlit as st
 import pandas as pd
@@ -42,9 +42,33 @@ with st.sidebar:
     st.title("S3 Analytics Dashboard")
     st.markdown("---")
     
+    # Get available buckets from config
+    available_buckets = list(st.session_state.analyzer.config['buckets'].keys())
+    
     # Bucket selection
-    bucket_name = st.text_input("Bucket Name", value=st.session_state.analyzer.config['bucket'])
-    prefix = st.text_input("Prefix", value=st.session_state.analyzer.config['prefix'])
+    bucket_name = st.selectbox(
+        "Select Bucket",
+        options=available_buckets,
+        index=0 if available_buckets else None
+    )
+    
+    # Get available prefixes for selected bucket
+    if bucket_name:
+        available_sources = st.session_state.analyzer.config['buckets'][bucket_name]
+        source_options = list(available_sources.keys())
+        selected_source = st.selectbox(
+            "Select Data Source",
+            options=source_options,
+            index=0 if source_options else None
+        )
+        
+        if selected_source:
+            prefix_options = [item['prefix'] for item in available_sources[selected_source]]
+            prefix = st.selectbox(
+                "Select Prefix",
+                options=prefix_options,
+                index=0 if prefix_options else None
+            )
     
     # Analysis controls
     if st.button("Run Analysis", type="primary"):
@@ -158,4 +182,4 @@ if st.session_state.last_analysis:
             )
 
 else:
-    st.info("Click 'Run Analysis' in the sidebar to start analyzing your S3 bucket.")
+    st.info("Select a bucket and click 'Run Analysis' to start analyzing your S3 data.")
